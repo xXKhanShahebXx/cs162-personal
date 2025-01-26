@@ -107,7 +107,7 @@ int count_words(WordCount **wclist, FILE *infile) {
       } else {
           if (index > 1) {
               buffer[index] = '\0';
-              if (add_word(wclist, buffer) != 0) {
+              if (add_word(wclist, buffer) == 1) {
                   return 1;
               }
           }
@@ -117,7 +117,7 @@ int count_words(WordCount **wclist, FILE *infile) {
 
   if (index > 0) {
       buffer[index] = '\0';
-      if (add_word(wclist, buffer) != 0) {
+      if (add_word(wclist, buffer) == 1) {
           return 1;
       }
   }
@@ -199,8 +199,9 @@ int main (int argc, char *argv[]) {
     if (count_mode) {
       total_words = num_words(infile);
     } else if (freq_mode) {
-      count_words(&word_counts, infile);
-    }
+      if (count_words(&word_counts, infile) == 1) {
+          return 1;
+      }
   } else {
     // At least one file specified. Useful functions: fopen(), fclose().
     // The first file can be found at argv[optind]. The last file can be
@@ -215,7 +216,9 @@ int main (int argc, char *argv[]) {
       if (count_mode) {
         total_words += num_words(infile);
       } else if (freq_mode) {
-        count_words(&word_counts, infile);
+        if (count_words(&word_counts, infile) == 1) {
+          return 1;
+        }
       }
       fclose(infile);
     }
