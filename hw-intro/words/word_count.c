@@ -61,6 +61,27 @@ int add_word(WordCount **wclist, char *word) {
      Otherwise insert with count 1.
      Returns 0 if no errors are encountered in the body of this function; 1 otherwise.
   */
+ WordCount *current = *wclist;
+ WordCount *prev = NULL;
+ while (current != NULL) {
+  if (strcmp(current->word, word) == 0) {
+    current->count++;
+    return 0;
+  }
+  prev = current;
+  current = current->next;
+ }
+ WordCount *new_node = malloc(sizeof(WordCount));
+ new_node->word = strdup(word);
+ new_node->count = 1;
+ new_node->next = NULL;
+
+ if (prev == NULL) {
+        *wclist = new_node;
+    } else {
+        prev->next = new_node;
+    }
+
  return 0;
 }
 
