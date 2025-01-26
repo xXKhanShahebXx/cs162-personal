@@ -72,7 +72,14 @@ int add_word(WordCount **wclist, char *word) {
   current = current->next;
  }
  WordCount *new_node = malloc(sizeof(WordCount));
+ if (!new_node) {
+        return 1; 
+    }
  new_node->word = strdup(word);
+ if (!new_node->word) {
+        free(new_node);
+        return 1;
+    }
  new_node->count = 1;
  new_node->next = NULL;
 

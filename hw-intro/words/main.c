@@ -210,7 +210,7 @@ int main (int argc, char *argv[]) {
       infile = fopen(argv[idx], "r");
       if (!infile) {
         perror("Error opening file");
-        continue;
+        return 1;
       }
       if (count_mode) {
         total_words += num_words(infile);
