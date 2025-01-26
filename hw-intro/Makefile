@@ -5,6 +5,7 @@ CC=i386-gcc
 endif
 
 CFLAGS?=-g
+CFLAGS += -DCS162
 BINARIES=map limits
 
 default:
