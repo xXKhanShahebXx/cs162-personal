@@ -202,6 +202,7 @@ int main (int argc, char *argv[]) {
       if (count_words(&word_counts, infile) == 1) {
           return 1;
       }
+    }
   } else {
     // At least one file specified. Useful functions: fopen(), fclose().
     // The first file can be found at argv[optind]. The last file can be
