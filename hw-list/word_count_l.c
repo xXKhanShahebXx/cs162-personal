@@ -64,7 +64,7 @@ word_count_t* add_word(word_count_list_t* wclist, char* word) {
   if (!wc) return NULL;
   wc->word = strdup(word);
   wc->count = 1;
-  list_push_back(wclist, wc);
+  list_push_back(wclist, &wc->elem);
   return wc;
 }
 
