@@ -41,7 +41,7 @@ word_count_t* find_word(word_count_list_t* wclist, char* word) {
     return NULL;
   }
   struct list_elem* e;
-  for (e = list_begin(&wclist); e != list_end(&wclist); e = list_next(e)) {
+  for (e = list_begin(wclist); e != list_end(wclist); e = list_next(e)) {
     word_count_t *wc = list_entry (e, word_count_t, elem);
     if (strcmp(wc->word, word) == 0) {
       return wc;
@@ -72,7 +72,7 @@ void fprint_words(word_count_list_t* wclist, FILE* outfile) {
   /* TODO */
   /* Please follow this format: fprintf(<file>, "%i\t%s\n", <count>, <word>); */
   struct list_elem *e;
-  for (e = list_begin(&wclist); e != list_end(&wclist); e = list_next(e)) {
+  for (e = list_begin(wclist); e != list_end(wclist); e = list_next(e)) {
     word_count_t *wc = list_entry (e, word_count_t, elem);
     fprintf(outfile, "%i\t%s\n", wc->count, wc->word);
   }

@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
       args->filename = argv[i];
       args->word_counts = &word_counts;
 
-      int rc = pthread_create(&threads[i-1], NULL, process_file, args);
+      int rc = pthread_create(&threads[i-1], NULL, threadfun, args);
       if (rc != 0) {
         fprintf(stderr, "Failed to create thread for %s: %s\n", 
                 argv[i], strerror(rc));
