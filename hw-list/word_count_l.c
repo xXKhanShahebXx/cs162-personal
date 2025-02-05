@@ -80,12 +80,6 @@ void fprint_words(word_count_list_t* wclist, FILE* outfile) {
 
 static bool less_list(const struct list_elem* ewc1, const struct list_elem* ewc2, void* aux) {
   /* TODO */
-  if (!ewc1) {
-    return false;
-  }
-  if (!ewc2) {
-    return true;
-  }
   word_count_t* wc1 = list_entry(ewc1, word_count_t, elem);
   word_count_t* wc2 = list_entry(ewc2, word_count_t, elem);
   bool (*cmp)(const word_count_t*, const word_count_t*) = (bool (*)(const word_count_t*, const word_count_t*)) aux;
