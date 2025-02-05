@@ -28,7 +28,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <pthread.h>
-
+#include <errno.h>
 #include "word_count.h"
 #include "word_helpers.h"
 
