@@ -82,5 +82,4 @@ int main(int argc, char* argv[]) {
   wordcount_sort(&word_counts, less_count);
   fprint_words(&word_counts, stdout);
   pthread_exit(NULL);
-  return 0;
 }
