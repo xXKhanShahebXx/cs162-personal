@@ -38,17 +38,11 @@ typedef struct {
 } thread_args_t;
 
 void* threadfun(void* arg) {
-  thread_args_t* args = (thread_args_t*)arg;
-  FILE* file = fopen(args->filename, "r");
-  if (file == NULL) {
-    fprintf(stderr, "Error opening %s: %s\n", args->filename, strerror(errno));
-    free(args);
-    pthread_exit(NULL);
-  }
-
-  count_words(args->word_counts, file);
+  char* filename = ((thread_args_t*)arg)->filename;
+  word_count_list_t* word_counts = ((thread_args_t*)arg)->word_counts;
+  FILE* file = fopen(filename, "r");
+  count_words(word_counts, file);
   fclose(file);
-  free(args);
   pthread_exit(NULL);
 }
 
@@ -65,28 +59,21 @@ int main(int argc, char* argv[]) {
     count_words(&word_counts, stdin);
   } else {
     /* TODO */
-    int num_files = argc - 1;
-    pthread_t threads[num_files];
+    int nthreads = argc - 1;
+    pthread_t threads[nthreads];
+    thread_args_t args[nthreads];
+    int rc;
 
-    for (int i = 1; i < argc; ++i) {
-      thread_args_t* args = malloc(sizeof(thread_args_t));
-      if (!args) {
-        perror("malloc failed");
-        exit(EXIT_FAILURE);
+    for (int i = 1; i < nthreads; i++) {
+      args[i - 1].filename = argv[i];
+      args[i - 1].word_counts = &word_counts;
+      rc = pthread_create(&threads[i - 1], NULL, threadfun, &args[i]);
+      if (rc) {
+      printf("ERROR; return code from pthread_create() is %d\n", rc);
+      exit(-1);
       }
-      args->filename = argv[i];
-      args->word_counts = &word_counts;
-
-      int rc = pthread_create(&threads[i-1], NULL, threadfun, args);
-      if (rc != 0) {
-        fprintf(stderr, "Failed to create thread for %s: %s\n", 
-                argv[i], strerror(rc));
-        free(args);
-        exit(EXIT_FAILURE);
-      }
-    }
-   
-    for (int i = 0; i < num_files; ++i) {
+    }  
+    for (int i = 0; i < nthreads; i++) {
       pthread_join(threads[i], NULL);
     }
   }
@@ -94,5 +81,6 @@ int main(int argc, char* argv[]) {
   /* Output final result of all threads' work. */
   wordcount_sort(&word_counts, less_count);
   fprint_words(&word_counts, stdout);
+  pthread_exit(NULL);
   return 0;
 }
