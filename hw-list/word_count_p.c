@@ -37,9 +37,7 @@ pthread_mutex_init(&wclist->lock, NULL);
 
 size_t len_words(word_count_list_t* wclist) {
   /* TODO */
-  pthread_mutex_lock(&wclist->lock);
   size_t size = list_size(&wclist->lst);
-  pthread_mutex_unlock(&wclist->lock);
   return size;
 }
 
@@ -48,7 +46,6 @@ word_count_t* find_word(word_count_list_t* wclist, char* word) {
   if (!wclist || !word || list_empty(&wclist->lst)) {
     return NULL;
   }
-  pthread_mutex_lock(&wclist->lock);
   struct list_elem *e;
   for (e = list_begin(&wclist->lst); e != list_end(&wclist->lst); e = list_next(e)) {
       word_count_t *wc = list_entry(e, word_count_t, elem);
@@ -57,7 +54,6 @@ word_count_t* find_word(word_count_list_t* wclist, char* word) {
           return wc;
       }
   }
-  pthread_mutex_unlock(&wclist->lock);
   return NULL;
 }
 
@@ -85,13 +81,11 @@ word_count_t* add_word(word_count_list_t* wclist, char* word) {
 void fprint_words(word_count_list_t* wclist, FILE* outfile) {
   /* TODO */
   /* Please follow this format: fprintf(<file>, "%i\t%s\n", <count>, <word>); */
-  pthread_mutex_lock(&wclist->lock);
   struct list_elem *e;
   for (e = list_begin(&wclist->lst); e != list_end(&wclist->lst); e = list_next(e)) {
       word_count_t *wc = list_entry(e, word_count_t, elem);
       fprintf(outfile, "%d\t%s\n", wc->count, wc->word);
   }
-  pthread_mutex_unlock(&wclist->lock);
 }
 
 static bool less_list(const struct list_elem *a, const struct list_elem *b, void *aux) {
@@ -104,7 +98,5 @@ static bool less_list(const struct list_elem *a, const struct list_elem *b, void
 void wordcount_sort(word_count_list_t* wclist,
                     bool less(const word_count_t*, const word_count_t*)) {
   /* TODO */
-  pthread_mutex_lock(&wclist->lock);
   list_sort(&wclist->lst, less_list, (void*)less);
-  pthread_mutex_unlock(&wclist->lock);
 }
