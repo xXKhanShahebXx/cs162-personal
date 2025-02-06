@@ -43,9 +43,6 @@ size_t len_words(word_count_list_t* wclist) {
 
 word_count_t* find_word(word_count_list_t* wclist, char* word) {
   /* TODO */
-  if (!wclist || !word || list_empty(&wclist->lst)) {
-    return NULL;
-  }
   struct list_elem *e;
   for (e = list_begin(&wclist->lst); e != list_end(&wclist->lst); e = list_next(e)) {
       word_count_t *wc = list_entry(e, word_count_t, elem);
@@ -58,9 +55,6 @@ word_count_t* find_word(word_count_list_t* wclist, char* word) {
 
 word_count_t* add_word(word_count_list_t* wclist, char* word) {
   /* TODO */
-  if (!wclist || !word) {
-    return NULL;
-  }
   pthread_mutex_lock(&wclist->lock);
   word_count_t *wc = find_word(wclist, word);
   if (wc) {
