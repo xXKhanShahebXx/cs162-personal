@@ -64,10 +64,10 @@ int main(int argc, char* argv[]) {
     thread_args_t args[nthreads];
     int rc;
 
-    for (int i = 1; i < nthreads; i++) {
-      args[i - 1].filename = argv[i];
-      args[i - 1].word_counts = &word_counts;
-      rc = pthread_create(&threads[i - 1], NULL, threadfun, &args[i]);
+    for (int i = 0; i < nthreads; i++) {
+      args[i].filename = argv[i + 1];
+      args[i].word_counts = &word_counts;
+      rc = pthread_create(&threads[i], NULL, threadfun, &args[i]);
       if (rc) {
       printf("ERROR; return code from pthread_create() is %d\n", rc);
       exit(-1);

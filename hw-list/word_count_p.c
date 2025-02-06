@@ -50,7 +50,6 @@ word_count_t* find_word(word_count_list_t* wclist, char* word) {
   for (e = list_begin(&wclist->lst); e != list_end(&wclist->lst); e = list_next(e)) {
       word_count_t *wc = list_entry(e, word_count_t, elem);
       if (strcmp(wc->word, word) == 0) {
-          pthread_mutex_unlock(&wclist->lock);
           return wc;
       }
   }
