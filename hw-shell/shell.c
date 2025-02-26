@@ -30,6 +30,8 @@ pid_t shell_pgid;
 
 int cmd_exit(struct tokens* tokens);
 int cmd_help(struct tokens* tokens);
+int cmd_pwd(struct tokens* tokens);
+int cmd_cd(struct tokens* tokens);
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
@@ -44,6 +46,8 @@ typedef struct fun_desc {
 fun_desc_t cmd_table[] = {
     {cmd_help, "?", "show this help menu"},
     {cmd_exit, "exit", "exit the command shell"},
+    {cmd_pwd, "pwd", "prints the current working directory to standard output"},
+    {cmd_cd, "cd", "changes the current working directory to another directory"}
 };
 
 /* Prints a helpful description for the given command */
@@ -55,6 +59,25 @@ int cmd_help(unused struct tokens* tokens) {
 
 /* Exits this shell */
 int cmd_exit(unused struct tokens* tokens) { exit(0); }
+
+int cmd_pwd(unused struct tokens* tokens) {
+  char buf[4096];
+  if (getcwd(buf, 4096) == NULL) {
+    printf("getcwd() error\n");
+    return 1;
+  }
+  printf("%s\n", buf);
+  return 0;
+}
+
+int cmd_cd(struct tokens* tokens) {
+  char* desired_directory = tokens_get_token(tokens, 1);
+  if (chdir(desired_directory) != 0) {
+    printf("chdir() error\n");
+    return 1;
+  }
+  return 1;
+}
 
 /* Looks up the built-in command, if it exists. */
 int lookup(char cmd[]) {
@@ -90,6 +113,134 @@ void init_shell() {
   }
 }
 
+typedef struct pipe_fd {
+  int fd[2];
+} pipe_fd;
+
+int make_pipes(pid_t pids[], int pipes) {
+  int processes = pipes + 1;
+  pipe_fd fd_arr[pipes];
+
+  for (int i = 0; i < pipes; i++) {
+    if (pipe(fd_arr[i].fd) != 0) {
+      printf("Error in creating pipe %d\n", i);
+      exit(-1);
+    }
+  }
+
+  int process_id = -1;
+  for (int i = 0; i < processes; i++) {
+    pid_t pid = fork();
+    if (pid == 0) {
+      process_id = i;
+      break;
+    } else {
+      pids[i] = pid;
+    }
+  }
+
+  if (process_id >= 0) {
+    if (process_id > 0) {
+      dup2(fd_arr[process_id - 1].fd[0], STDIN_FILENO);
+    }
+    if (process_id < pipes) {
+      dup2(fd_arr[process_id].fd[1], STDOUT_FILENO);
+    }
+  }
+
+  for (int i = 0; i < pipes; i++) {
+    close(fd_arr[i].fd[0]);
+    close(fd_arr[i].fd[1]);
+  }
+  return process_id;
+
+}
+
+void run_program(struct tokens* tokens) {
+  int token_length = tokens_get_length(tokens);
+  int pipes = 0;
+  for (int i = 0; i < token_length; i++) {
+    char* token = tokens_get_token(tokens, i);
+    if (token[0] == '|') {
+      pipes++;
+    }
+  }
+  int processes = pipes + 1;
+  pid_t pids[pipes + 1];
+  int process_id = make_pipes(pids, pipes);
+
+  if (process_id >= 0) {
+    int seg = 0, seg_start = 0, seg_end = token_length;
+    for (int i = 0; i < token_length; i++) {
+      if (tokens_get_token(tokens, i)[0] == '|') {
+        if (seg == process_id) {
+          seg_end = i;
+          break;
+        }
+        seg++;
+        seg_start = i + 1;
+      }
+    }
+
+    int arg_count = seg_end - seg_start;
+    char* args[arg_count + 1];
+    for (int i = 0; i < arg_count; i++) {
+      args[i] = tokens_get_token(tokens, seg_start + i);
+    }
+    args[arg_count] = NULL;
+
+    int idx = 0;
+    while (args[idx] != NULL) {
+      if (args[idx][0] == '<') {
+        if (args[idx + 1] == NULL) {
+          printf("Redirect (<) file name is null\n");
+          exit(-1);
+        }
+        freopen(args[idx + 1], "r", stdin);
+        args[idx] = NULL;
+        idx++;
+      }
+      if (args[idx][0] == '>') {
+        if (args[idx + 1] == NULL) {
+          printf("Redirect (>) file name is null\n");
+          exit(-1);
+        }
+        freopen(args[idx + 1], "w", stdout);
+        args[idx] = NULL;
+        idx++;
+      }
+      idx++;
+    }
+
+    char* program_name = args[0];
+    if (program_name[0] != '/') {
+      char* full_path = strndup(getenv("PATH"), 4096);
+      char* token;
+      char program_full_path[4096];
+      char* save;
+      token = strtok_r(full_path, ":", &save);
+      while (token) {
+        strncpy(program_full_path, token, 4096);
+        strncat(program_full_path, "/", 2);
+        strncat(program_full_path, program_name, 4096);
+        execv(program_full_path, args);
+        token = strtok_r(NULL, ":", &save);
+      }
+    } else {
+      execv(program_name, args);
+    }
+    printf("%s can't be found in the path\n", program_name);
+    exit(-1);
+
+  } else {
+    for (int i = 0; i < processes; i++) {
+      waitpid(pids[i], NULL, 0);
+    }
+  }
+  
+}
+
+
 int main(unused int argc, unused char* argv[]) {
   init_shell();
 
@@ -111,7 +262,8 @@ int main(unused int argc, unused char* argv[]) {
       cmd_table[fundex].fun(tokens);
     } else {
       /* REPLACE this to run commands as programs. */
-      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      // fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      run_program(tokens);
     }
 
     if (shell_is_interactive)
