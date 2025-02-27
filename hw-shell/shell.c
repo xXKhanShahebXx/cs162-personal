@@ -284,8 +284,6 @@ void run_program(struct tokens* tokens) {
         waitpid(pids[i], NULL, 0);
       }
       tcsetpgrp(shell_terminal, shell_pgid);
-    } else {
-      printf("[Background PID: %d]\n", pids[0]);
     }
   }
 }
