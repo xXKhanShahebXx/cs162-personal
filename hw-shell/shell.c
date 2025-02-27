@@ -32,6 +32,7 @@ int cmd_exit(struct tokens* tokens);
 int cmd_help(struct tokens* tokens);
 int cmd_pwd(struct tokens* tokens);
 int cmd_cd(struct tokens* tokens);
+int cmd_wait(struct tokens* tokens);
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
@@ -47,7 +48,8 @@ fun_desc_t cmd_table[] = {
     {cmd_help, "?", "show this help menu"},
     {cmd_exit, "exit", "exit the command shell"},
     {cmd_pwd, "pwd", "prints the current working directory to standard output"},
-    {cmd_cd, "cd", "changes the current working directory to another directory"}
+    {cmd_cd, "cd", "changes the current working directory to another directory"},
+    {cmd_wait, "wait", "waits until all bg jobs have been terminated"}
 };
 
 /* Prints a helpful description for the given command */
@@ -76,7 +78,13 @@ int cmd_cd(struct tokens* tokens) {
     printf("chdir() error\n");
     return 1;
   }
-  return 1;
+  return 0;
+}
+
+int cmd_wait(struct tokens* tokens) {
+  while (waitpid(-1, NULL, 0) > 0)
+  ;
+  return 0;
 }
 
 /* Looks up the built-in command, if it exists. */
@@ -87,6 +95,22 @@ int lookup(char cmd[]) {
   return -1;
 }
 
+void sigchld_handler(int sig) {
+  while (waitpid(-1, NULL, WNOHANG) > 0)
+  ;
+}
+
+void setup_sigaction(int signum, void (*handler)(int)) {
+  struct sigaction sa;
+  sa.sa_handler = handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  if (sigaction(signum, &sa, NULL) < 0) {
+    perror("sigaction error");
+    exit(1);
+  }
+}
+
 /* Intialization procedures for this shell */
 void init_shell() {
   /* Our shell is connected to standard input. */
@@ -94,6 +118,11 @@ void init_shell() {
 
   /* Check if we are running interactively */
   shell_is_interactive = isatty(shell_terminal);
+
+  setup_sigaction(SIGINT, SIG_IGN);
+  setup_sigaction(SIGTSTP, SIG_IGN);
+  setup_sigaction(SIGTTOU, SIG_IGN);
+  setup_sigaction(SIGCHLD, sigchld_handler);
 
   if (shell_is_interactive) {
     /* If the shell is not currently in the foreground, we must pause the shell until it becomes a
@@ -132,6 +161,21 @@ int make_pipes(pid_t pids[], int pipes) {
   for (int i = 0; i < processes; i++) {
     pid_t pid = fork();
     if (pid == 0) {
+      if (i == 0) {
+        if (setpgid(getpid(), getpid()) != 0) {
+          printf("Error setting process group id\n");
+          exit(-1);
+        }
+      } else {
+        if (setpgid(getpid(), pids[0]) != 0) {
+          printf("Error setting process group id\n");
+          exit(-1);
+        }
+      }
+      signal(SIGINT, SIG_DFL);
+      signal(SIGTSTP, SIG_DFL);
+      signal(SIGTTOU, SIG_DFL);
+      signal(SIGCHLD, SIG_DFL);
       process_id = i;
       break;
     } else {
@@ -158,6 +202,7 @@ int make_pipes(pid_t pids[], int pipes) {
 
 void run_program(struct tokens* tokens) {
   int token_length = tokens_get_length(tokens);
+  bool background = tokens_get_token(tokens, token_length - 1)[0] == '&';
   int pipes = 0;
   for (int i = 0; i < token_length; i++) {
     char* token = tokens_get_token(tokens, i);
@@ -233,11 +278,16 @@ void run_program(struct tokens* tokens) {
     exit(-1);
 
   } else {
-    for (int i = 0; i < processes; i++) {
-      waitpid(pids[i], NULL, 0);
+    if (!background) {
+      tcsetpgrp(shell_terminal, pids[0]);
+      for (int i = 0; i < processes; i++) {
+        waitpid(pids[i], NULL, 0);
+      }
+      tcsetpgrp(shell_terminal, shell_pgid);
+    } else {
+      printf("[Background PID: %d]\n", pids[0]);
     }
   }
-  
 }
 
 
