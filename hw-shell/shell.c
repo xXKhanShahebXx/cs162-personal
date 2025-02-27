@@ -40,6 +40,7 @@ typedef struct process_info {
 
 process_info_t* process_list = NULL;
 process_info_t* last_process = NULL;
+process_info_t* last_background_process = NULL;
 
 int cmd_exit(struct tokens* tokens);
 int cmd_help(struct tokens* tokens);
@@ -70,29 +71,32 @@ fun_desc_t cmd_table[] = {
 };
 
 void add_process(pid_t pid, pid_t pgid, bool is_background, const char* cmd) {
-    process_info_t* new_process = malloc(sizeof(process_info_t));
-    if (!new_process) {
-      perror("malloc");
-      exit(EXIT_FAILURE);
-    }
+  process_info_t* new_process = malloc(sizeof(process_info_t));
+  if (!new_process) {
+    perror("malloc");
+    exit(EXIT_FAILURE);
+  }
     
-    new_process->pid = pid;
-    new_process->pgid = pgid;
-    new_process->is_stopped = false;
-    new_process->is_background = is_background;
-    strncpy(new_process->cmd, cmd, 255);
-    new_process->cmd[255] = '\0';
-    
-    tcgetattr(shell_terminal, &new_process->tmodes);
-    
-    new_process->next = NULL;
-    
-    if (process_list == NULL) {
-      process_list = new_process;
-    } else {
-      last_process->next = new_process;
-    }
-    last_process = new_process;
+  new_process->pid = pid;
+  new_process->pgid = pgid;
+  new_process->is_stopped = false;
+  new_process->is_background = is_background;
+  strncpy(new_process->cmd, cmd, 255);
+  new_process->cmd[255] = '\0';
+  
+  tcgetattr(shell_terminal, &new_process->tmodes);
+  
+  new_process->next = NULL;
+  
+  if (process_list == NULL) {
+    process_list = new_process;
+  } else {
+    last_process->next = new_process;
+  }
+  last_process = new_process;
+  if (is_background && pgid == pid) {
+    last_background_process = new_process;
+  }
 }
 
 process_info_t* find_process(pid_t pid) {
@@ -180,75 +184,79 @@ int cmd_wait(struct tokens* tokens) {
 }
 
 int cmd_fg(struct tokens* tokens) {
-    pid_t pid = 0;
-    process_info_t* process = NULL;
-    
-    if (tokens_get_length(tokens) > 1) {
-      pid = atoi(tokens_get_token(tokens, 1));
-      process = find_process(pid);
-    } else if (last_process != NULL) {
-      process = last_process;
-      pid = process->pid;
-    }
-    
-    if (process == NULL) {
-      fprintf(stderr, "fg: no such job\n");
-      return 1;
-    }
-    
-    tcsetpgrp(shell_terminal, process->pgid);
-    tcsetattr(shell_terminal, TCSADRAIN, &process->tmodes);
-    process->is_background = false;
-    
-    if (process->is_stopped) {
-      process->is_stopped = false;
-      kill(-process->pgid, SIGCONT);
-    }
-    
-    int status;
-    waitpid(pid, &status, WUNTRACED);
-    
-    if (WIFSTOPPED(status)) {
-      process->is_stopped = true;
-      process->is_background = true;
-      printf("\n[%d] Stopped\t%s\n", pid, process->cmd);
-    } else if (WIFEXITED(status) || WIFSIGNALED(status)) {
-      remove_process(pid);
-    }
-    
-    tcsetpgrp(shell_terminal, shell_pgid);
-    tcsetattr(shell_terminal, TCSADRAIN, &shell_tmodes);
-    return 0;
+  pid_t pid = 0;
+  process_info_t* process = NULL;
+  
+  if (tokens_get_length(tokens) > 1) {
+    pid = atoi(tokens_get_token(tokens, 1));
+    process = find_process(pid);
+  } else if (last_background_process != NULL) {
+    process = last_background_process;
+    pid = process->pid;
+  } else if (last_process != NULL) {
+    process = last_process;
+    pid = process->pid;
+  }
+  
+  if (process == NULL) {
+    fprintf(stderr, "fg: no such job\n");
+    return 1;
+  }
+  
+  printf("%s\n", process->cmd);
+  tcsetpgrp(shell_terminal, process->pgid);
+  tcsetattr(shell_terminal, TCSADRAIN, &process->tmodes);
+  process->is_background = false;
+  
+  if (process->is_stopped) {
+    process->is_stopped = false;
+    kill(-process->pgid, SIGCONT);
+  }
+  
+  int status;
+  waitpid(pid, &status, WUNTRACED);
+  
+  if (WIFSTOPPED(status)) {
+    process->is_stopped = true;
+    process->is_background = true;
+    printf("\n[%d] Stopped\t%s\n", pid, process->cmd);
+  } else if (WIFEXITED(status) || WIFSIGNALED(status)) {
+    remove_process(pid);
+  }
+  
+  tcsetpgrp(shell_terminal, shell_pgid);
+  tcsetattr(shell_terminal, TCSADRAIN, &shell_tmodes);
+  return 0;
 }
 
 int cmd_bg(struct tokens* tokens) {
-    pid_t pid = 0;
-    process_info_t* process = NULL;
-    if (tokens_get_length(tokens) > 1) {
-      pid = atoi(tokens_get_token(tokens, 1));
-      process = find_process(pid);
-    } else if (last_process != NULL) {
-      process = last_process;
-      pid = process->pid;
-    }
-    
-    if (process == NULL) {
-      fprintf(stderr, "bg: no such job\n");
-      return 1;
-    }
-    
-    if (!process->is_stopped) {
-      fprintf(stderr, "bg: job already in background\n");
-      return 1;
-    }
-    
-    process->is_stopped = false;
-    process->is_background = true;
-    
-    kill(-process->pgid, SIGCONT);
-    printf("[%d] %s &\n", pid, process->cmd);
-    
-    return 0;
+  pid_t pid = 0;
+  process_info_t* process = NULL;
+  if (tokens_get_length(tokens) > 1) {
+    pid = atoi(tokens_get_token(tokens, 1));
+    process = find_process(pid);
+  } else if (last_process != NULL) {
+    process = last_process;
+    pid = process->pid;
+  }
+  
+  if (process == NULL) {
+    fprintf(stderr, "bg: no such job\n");
+    return 1;
+  }
+  
+  if (!process->is_stopped) {
+    fprintf(stderr, "bg: job already in background\n");
+    return 1;
+  }
+  
+  process->is_stopped = false;
+  process->is_background = true;
+  
+  kill(-process->pgid, SIGCONT);
+  printf("[%d] %s &\n", pid, process->cmd);
+  
+  return 0;
 }
 
 /* Looks up the built-in command, if it exists. */
