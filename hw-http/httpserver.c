@@ -196,6 +196,48 @@ void handle_files_request(int fd) {
   return;
 }
 
+typedef struct {
+  int from_fd;
+  int to_fd;
+} proxy_data;
+
+
+void* forward_data(void* arg) {
+  proxy_data* data = (proxy_data*)arg;
+  char buffer[4096];
+  ssize_t bytes_read, bytes_written;
+  
+  pthread_detach(pthread_self());
+  
+  while (1) {
+      bytes_read = read(data->from_fd, buffer, sizeof(buffer));
+      if (bytes_read <= 0) {
+          break; 
+      }
+      
+
+      bytes_written = 0;
+      while (bytes_written < bytes_read) {
+          ssize_t result = write(data->to_fd, buffer + bytes_written, bytes_read - bytes_written);
+          if (result < 0) {
+              if (errno == EINTR) continue; 
+              goto cleanup;
+          }
+          bytes_written += result;
+      }
+      
+      if (bytes_written < bytes_read) {
+          break; 
+      }
+  }
+  
+cleanup:
+  close(data->from_fd);
+  close(data->to_fd);
+  free(data);
+  return NULL;
+}
+
 /*
  * Opens a connection to the proxy target (hostname=server_proxy_hostname and
  * port=server_proxy_port) and relays traffic to/from the stream fd and the
@@ -259,6 +301,17 @@ void handle_proxy_request(int fd) {
 
   /* TODO: PART 4 */
   /* PART 4 BEGIN */
+  proxy_data* client_to_target = malloc(sizeof(proxy_data));
+  client_to_target->from_fd = fd;
+  client_to_target->to_fd = target_fd;
+  
+  proxy_data* target_to_client = malloc(sizeof(proxy_data));
+  target_to_client->from_fd = target_fd;
+  target_to_client->to_fd = fd;
+  
+  pthread_t thread1, thread2;
+  pthread_create(&thread1, NULL, forward_data, client_to_target);
+  pthread_create(&thread2, NULL, forward_data, target_to_client);
 
   /* PART 4 END */
 }
