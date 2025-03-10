@@ -331,7 +331,11 @@ void* handle_clients(void* void_request_handler) {
 
   /* TODO: PART 7 */
   /* PART 7 BEGIN */
+  while (1) {
+    int client_fd = wq_pop(&work_queue);
+    request_handler(client_fd);
 
+  }
   /* PART 7 END */
 }
 
@@ -342,7 +346,14 @@ void init_thread_pool(int num_threads, void (*request_handler)(int)) {
 
   /* TODO: PART 7 */
   /* PART 7 BEGIN */
-
+  wq_init(&work_queue);
+  pthread_t thread;
+  for (int i = 0; i < num_threads; i++) {
+    if (pthread_create(&thread, NULL, handle_clients, (void*)request_handler) != 0) {
+      perror("Failed to create thread in pool");
+      exit(errno);
+    }
+  }
   /* PART 7 END */
 }
 #endif
@@ -512,7 +523,7 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
      */
 
     /* PART 7 BEGIN */
-
+    wq_push(&work_queue, client_socket_number);
     /* PART 7 END */
 #endif
   }
