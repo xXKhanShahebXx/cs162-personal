@@ -92,43 +92,34 @@ void serve_directory(int fd, char* path) {
   /* TODO: PART 3 */
   /* PART 3 BEGIN */
 
-  DIR* directory = opendir(path);
-  if (!directory) {
-    perror("Failed to open directory");
-    return;
+  DIR* dir = opendir(path);
+  if (dir == NULL) {
+      perror("opendir");
+      return;
   }
   
-
-  const char* html_start = 
-      "<!DOCTYPE html>\n<html>\n<head>\n"
+  const char* opening_html =
+      "<!DOCTYPE html>\n"
+      "<html>\n"
+      "<head>\n"
       "    <meta charset=\"UTF-8\">\n"
-      "    <title>Directory Listing</title>\n"
-      "</head>\n<body>\n"
-      "    <h1>Directory Listing</h1>\n";
-  write(fd, html_start, strlen(html_start));
+      "</head>\n"
+      "<body>\n";
+  write(fd, opening_html, strlen(opening_html));
   
-
-  char parent_link[512];
-  http_format_href(parent_link, "..", "Parent Directory");
-  write(fd, parent_link, strlen(parent_link));
-  write(fd, "<br/>\n", 6);
-  
- 
   struct dirent* entry;
-  while ((entry = readdir(directory)) != NULL) {
-    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-      continue;
-    }
-    
-    char link_html[512];
-    http_format_href(link_html, entry->d_name, entry->d_name);
-    write(fd, link_html, strlen(link_html));
-    write(fd, "<br/>\n", 6);
+  while ((entry = readdir(dir)) != NULL) {
+      const char* filename = entry->d_name;
+      
+      int buffer_size = strlen("<a href=\"//\"></a><br/>") + strlen(path) + strlen(filename) * 2 + 1;
+      char buffer[buffer_size];
+      http_format_href(buffer, path, filename);
+      write(fd, buffer, strlen(buffer));
   }
   
-  closedir(directory);
-  const char* html_end = "\n</body>\n</html>\n";
-  write(fd, html_end, strlen(html_end));
+  closedir(dir);
+  const char* closing_html = "\n</body>\n</html>\n";
+  write(fd, closing_html, strlen(closing_html));
 
   /* PART 3 END */
 }
