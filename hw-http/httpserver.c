@@ -40,10 +40,43 @@ void serve_file(int fd, char* path) {
   /* TODO: PART 2 */
   /* PART 2 BEGIN */
 
+  int file_fd = open(path, O_RDONLY);
+  if (file_fd < 0) {
+    perror("Failed to open file");
+    return;
+  }
+
+  struct stat file_stat;
+  if (fstat(file_fd, &file_stat) < 0) {
+    perror("Failed to get file stats");
+    close(file_fd);
+    return;
+  }
+
+  char file_size_str[20];
+  snprintf(file_size_str, sizeof(file_size_str), "%ld", file_stat.st_size);
+
   http_start_response(fd, 200);
   http_send_header(fd, "Content-Type", http_get_mime_type(path));
-  http_send_header(fd, "Content-Length", "0"); // TODO: change this line too
+  http_send_header(fd, "Content-Length", file_size_str); // TODO: change this line too
   http_end_headers(fd);
+
+  char buffer[4096];
+  ssize_t bytes_read;
+  while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
+    ssize_t bytes_written = 0;
+    while (bytes_written < bytes_read) {
+      ssize_t result = write(fd, buffer + bytes_written, bytes_read - bytes_written);
+      if (result < 0) {
+        perror("Failed to write file contents to socket");
+        close(file_fd);
+        return;
+      }
+      bytes_written += result;
+    }
+  }
+
+  close(file_fd);
 
   /* PART 2 END */
 }
@@ -55,14 +88,46 @@ void serve_directory(int fd, char* path) {
 
   /* TODO: PART 3 */
   /* PART 3 BEGIN */
+  const char* html_header = "<html><head><title>Directory Listing</title></head><body><h1>Directory Listing</h1><ul>";
+  write(fd, html_header, strlen(html_header));
 
   // TODO: Open the directory (Hint: opendir() may be useful here)
+  DIR* dir = opendir(path);
+  if (dir == NULL) {
+    perror("Failed to open directory");
+    return;
+  }
+
+  char parent_link[512];
+  http_format_href(parent_link, "../", "Parent Directory");
+  write(fd, "<li>", 4);
+  write(fd, parent_link, strlen(parent_link));
+  write(fd, "</li>", 5);
+  free(parent_link);
 
   /**
    * TODO: For each entry in the directory (Hint: look at the usage of readdir() ),
    * send a string containing a properly formatted HTML. (Hint: the http_format_href()
    * function in libhttp.c may be useful here)
    */
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+
+    char entry_link[512];
+    http_format_href(entry_link, entry->d_name, entry->d_name);
+    write(fd, "<li>", 4);
+    write(fd, entry_link, strlen(entry_link));
+    write(fd, "</li>", 5);
+  }
+
+  const char* html_footer = "</ul></body></html>";
+  write(fd, html_footer, strlen(html_footer));
+
+  closedir(dir);
 
   /* PART 3 END */
 }
@@ -118,8 +183,37 @@ void handle_files_request(int fd) {
 
   /* PART 2 & 3 BEGIN */
 
-  /* PART 2 & 3 END */
+  struct stat path_stat;
+  if (stat(path, &path_stat) == 0) {
+    if (S_ISREG(path_stat.st_mode)) {
+      serve_file(fd, path);
+    } else if (S_ISDIR(path_stat.st_mode)) {
+      char* index_path = malloc(strlen(path) + 12);
+      if (path[strlen(path) - 1] == '/') {
+        sprintf(index_path, "%sindex.html", path);
+      } else {
+        sprintf(index_path, "%s/index.html", path);
+      }
+      struct stat index_stat;
+      if (stat(index_path, &index_stat) == 0 && S_ISREG(index_stat.st_mode)) {
+        serve_file(fd, index_path);
+      } else {
+        serve_directory(fd, path);
+      }
+      free(index_path);
+    } else {
+      http_start_response(fd, 404);
+      http_send_header(fd, "Content-Type", "text/html");
+      http_end_headers(fd);
+    }
+  } else {
+    http_start_response(fd, 404);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+  }
 
+  /* PART 2 & 3 END */
+  free(path);
   close(fd);
   return;
 }
@@ -263,6 +357,15 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
    */
 
   /* PART 1 BEGIN */
+  if (bind(*socket_number, (struct sockaddr*) &server_address, sizeof(server_address)) != 0) {
+    perror("Failed to bind");
+    exit(errno);
+  }
+
+  if (listen(*socket_number, 1024) != 0) {
+    perror("Failed to listen");
+    exit(errno);
+  }
 
   /* PART 1 END */
   printf("Listening on port %d...\n", server_port);
