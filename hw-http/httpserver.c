@@ -39,43 +39,46 @@ void serve_file(int fd, char* path) {
 
   /* TODO: PART 2 */
   /* PART 2 BEGIN */
+  struct stat file_info;
+  if (stat(path, &file_info) < 0) {
+    perror("Failed to get file stats");
+    return;
+  }
+  
 
+  char size_str[20];
+  snprintf(size_str, sizeof(size_str), "%ld", file_info.st_size);
+  
+
+  http_start_response(fd, 200);
+  http_send_header(fd, "Content-Type", http_get_mime_type(path));
+  http_send_header(fd, "Content-Length", size_str);
+  http_end_headers(fd);
+  
+ 
   int file_fd = open(path, O_RDONLY);
   if (file_fd < 0) {
     perror("Failed to open file");
     return;
   }
+  
 
-  struct stat file_stat;
-  if (fstat(file_fd, &file_stat) < 0) {
-    perror("Failed to get file stats");
-    close(file_fd);
-    return;
-  }
-
-  char file_size_str[20];
-  snprintf(file_size_str, sizeof(file_size_str), "%ld", file_stat.st_size);
-
-  http_start_response(fd, 200);
-  http_send_header(fd, "Content-Type", http_get_mime_type(path));
-  http_send_header(fd, "Content-Length", file_size_str); // TODO: change this line too
-  http_end_headers(fd);
-
-  char buffer[4096];
+  char buf[1024];
   ssize_t bytes_read;
-  while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
+  while ((bytes_read = read(file_fd, buf, sizeof(buf))) > 0) {
     ssize_t bytes_written = 0;
     while (bytes_written < bytes_read) {
-      ssize_t result = write(fd, buffer + bytes_written, bytes_read - bytes_written);
+      ssize_t result = write(fd, buf + bytes_written, bytes_read - bytes_written);
       if (result < 0) {
-        perror("Failed to write file contents to socket");
+        if (errno == EINTR) continue; 
+        perror("Write error");
         close(file_fd);
         return;
       }
       bytes_written += result;
     }
   }
-
+  
   close(file_fd);
 
   /* PART 2 END */
@@ -88,52 +91,44 @@ void serve_directory(int fd, char* path) {
 
   /* TODO: PART 3 */
   /* PART 3 BEGIN */
-  const char* html_header = "<html><head><title>Directory Listing</title></head><body><h1>Directory Listing</h1><ul>";
-  write(fd, html_header, strlen(html_header));
 
-  // TODO: Open the directory (Hint: opendir() may be useful here)
-  DIR* dir = opendir(path);
-  if (dir == NULL) {
+  DIR* directory = opendir(path);
+  if (!directory) {
     perror("Failed to open directory");
     return;
   }
+  
+
+  const char* html_start = 
+      "<!DOCTYPE html>\n<html>\n<head>\n"
+      "    <meta charset=\"UTF-8\">\n"
+      "    <title>Directory Listing</title>\n"
+      "</head>\n<body>\n"
+      "    <h1>Directory Listing</h1>\n";
+  write(fd, html_start, strlen(html_start));
+  
 
   char parent_link[512];
   http_format_href(parent_link, "..", "Parent Directory");
-  write(fd, "<li>", 4);
   write(fd, parent_link, strlen(parent_link));
-  write(fd, "</li>", 5);
-  free(parent_link);
-
-  /**
-   * TODO: For each entry in the directory (Hint: look at the usage of readdir() ),
-   * send a string containing a properly formatted HTML. (Hint: the http_format_href()
-   * function in libhttp.c may be useful here)
-   */
-
+  write(fd, "<br/>\n", 6);
+  
+ 
   struct dirent* entry;
-  while ((entry = readdir(dir)) != NULL) {
+  while ((entry = readdir(directory)) != NULL) {
     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
       continue;
     }
-
-    char entry_path[512];
-    if (strcmp(path, "./") == 0) {
-      sprintf(entry_path, "/%s", entry->d_name);
-    } else {
-      sprintf(entry_path, "%s", entry->d_name);
-    }
-    char entry_link[512];
-    http_format_href(entry_link, entry_path, entry->d_name);
-    write(fd, "<li>", 4);
-    write(fd, entry_link, strlen(entry_link));
-    write(fd, "</li>", 5);
+    
+    char link_html[512];
+    http_format_href(link_html, entry->d_name, entry->d_name);
+    write(fd, link_html, strlen(link_html));
+    write(fd, "<br/>\n", 6);
   }
-
-  const char* html_footer = "</ul></body></html>";
-  write(fd, html_footer, strlen(html_footer));
-
-  closedir(dir);
+  
+  closedir(directory);
+  const char* html_end = "\n</body>\n</html>\n";
+  write(fd, html_end, strlen(html_end));
 
   /* PART 3 END */
 }
@@ -188,36 +183,22 @@ void handle_files_request(int fd) {
    */
 
   /* PART 2 & 3 BEGIN */
-
-  struct stat path_stat;
-  if (stat(path, &path_stat) == 0) {
-    if (S_ISREG(path_stat.st_mode)) {
-      serve_file(fd, path);
-    } else if (S_ISDIR(path_stat.st_mode)) {
-      char* index_path = malloc(strlen(path) + 12);
-      if (path[strlen(path) - 1] == '/') {
-        sprintf(index_path, "%sindex.html", path);
-      } else {
-        sprintf(index_path, "%s/index.html", path);
-      }
-      struct stat index_stat;
-      if (stat(index_path, &index_stat) == 0 && S_ISREG(index_stat.st_mode)) {
-        serve_file(fd, index_path);
-      } else {
-        serve_directory(fd, path);
-      }
-      free(index_path);
-    } else {
-      http_start_response(fd, 404);
-      http_send_header(fd, "Content-Type", "text/html");
-      http_end_headers(fd);
-    }
-  } else {
+  struct stat file_stat;
+  if (stat(path, &file_stat) == -1) {
     http_start_response(fd, 404);
-    http_send_header(fd, "Content-Type", "text/html");
-    http_end_headers(fd);
+  } else if (S_ISDIR(file_stat.st_mode)) {
+      int index_path_len = strlen(path) + strlen("/index.html") + 1;
+      char index_path[index_path_len];
+      http_format_index(index_path, path);
+      struct stat index_stat;
+      if (stat(index_path, &index_stat) == -1) {
+        serve_directory(fd, path);
+      } else {
+        serve_file(fd, index_path);
+      }
+  } else {
+    serve_file(fd, path);
   }
-
   /* PART 2 & 3 END */
   free(path);
   close(fd);
