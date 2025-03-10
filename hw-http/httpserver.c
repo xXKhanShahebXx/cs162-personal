@@ -99,7 +99,7 @@ void serve_directory(int fd, char* path) {
   }
 
   char parent_link[512];
-  http_format_href(parent_link, "../", "Parent Directory");
+  http_format_href(parent_link, "..", "Parent Directory");
   write(fd, "<li>", 4);
   write(fd, parent_link, strlen(parent_link));
   write(fd, "</li>", 5);
@@ -117,8 +117,14 @@ void serve_directory(int fd, char* path) {
       continue;
     }
 
+    char entry_path[512];
+    if (strcmp(path, "./") == 0) {
+      sprintf(entry_path, "/%s", entry->d_name);
+    } else {
+      sprintf(entry_path, "%s", entry->d_name);
+    }
     char entry_link[512];
-    http_format_href(entry_link, entry->d_name, entry->d_name);
+    http_format_href(entry_link, entry_path, entry->d_name);
     write(fd, "<li>", 4);
     write(fd, entry_link, strlen(entry_link));
     write(fd, "</li>", 5);
