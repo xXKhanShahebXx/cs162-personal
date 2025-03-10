@@ -470,6 +470,36 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
      */
 
     /* PART 6 BEGIN */
+    typedef struct {
+      int client_fd;
+      void (*handler)(int);
+    } thread_args_t;
+    
+    thread_args_t* args = malloc(sizeof(thread_args_t));
+    if (args == NULL) {
+        perror("Failed to allocate memory");
+        close(client_socket_number);
+        continue;
+    }
+    args->client_fd = client_socket_number;
+    args->handler = request_handler;
+    
+    void* handle_client_thread(void* arg) {
+        thread_args_t* args = (thread_args_t*)arg;
+        int client_fd = args->client_fd;
+        void (*handler)(int) = args->handler;
+        free(args);
+        pthread_detach(pthread_self());
+        handler(client_fd);
+        return NULL;
+    }
+    
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, handle_client_thread, args) != 0) {
+        perror("Failed to create thread");
+        free(args);
+        close(client_socket_number);
+    }
 
     /* PART 6 END */
 #elif POOLSERVER
