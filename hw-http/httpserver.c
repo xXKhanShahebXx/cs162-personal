@@ -213,7 +213,6 @@ void handle_files_request(int fd) {
   }
 
   /* PART 2 & 3 END */
-  
   free(path);
   close(fd);
   return;
