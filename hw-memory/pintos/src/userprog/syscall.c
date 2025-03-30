@@ -7,6 +7,7 @@
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "threads/palloc.h"
 
 static void syscall_handler(struct intr_frame*);
 
@@ -76,6 +77,74 @@ static void syscall_close(int fd) {
   }
 }
 
+
+static void* syscall_sbrk (intptr_t increment)
+{
+  struct thread *cur = thread_current();
+  void *old_brk = cur->brk;
+  void *new_brk = (char *)old_brk + increment;
+
+
+  if (increment == 0)
+    return old_brk;
+
+
+  if (new_brk < cur->heap_start || new_brk >= PHYS_BASE)
+    return (void *) -1;
+
+  if (increment > 0)
+    {
+      void *start_alloc = pg_round_up(old_brk);
+      for (void *addr = start_alloc; addr < new_brk; addr += PGSIZE)
+        {
+          void *page = palloc_get_page(PAL_USER | PAL_ZERO);
+          if (page == NULL)
+            {
+              for (void *rollback_addr = start_alloc; rollback_addr < addr; rollback_addr += PGSIZE)
+                {
+                  void *mapped_page = pagedir_get_page(cur->pagedir, rollback_addr);
+                  if (mapped_page != NULL)
+                    {
+                      pagedir_clear_page(cur->pagedir, rollback_addr);
+                      palloc_free_page(mapped_page);
+                    }
+                }
+              return (void *) -1;
+            }
+          if (!pagedir_set_page(cur->pagedir, addr, page, true))
+            {
+              palloc_free_page(page);
+              for (void *rollback_addr = start_alloc; rollback_addr < addr; rollback_addr += PGSIZE)
+                {
+                  void *mapped_page = pagedir_get_page(cur->pagedir, rollback_addr);
+                  if (mapped_page != NULL)
+                    {
+                      pagedir_clear_page(cur->pagedir, rollback_addr);
+                      palloc_free_page(mapped_page);
+                    }
+                }
+              return (void *) -1;
+            }
+        }
+    }
+  else
+    {
+      void *start_free = pg_round_up(new_brk);
+      for (void *addr = start_free; addr < pg_round_up(old_brk); addr += PGSIZE)
+        {
+          void *page = pagedir_get_page(cur->pagedir, addr);
+          if (page != NULL)
+            {
+              pagedir_clear_page(cur->pagedir, addr);
+              palloc_free_page(page);
+            }
+        }
+    }
+  cur->brk = new_brk;
+  return old_brk;
+}
+
+
 static void syscall_handler(struct intr_frame* f) {
   uint32_t* args = (uint32_t*)f->esp;
   struct thread* t = thread_current();
@@ -110,6 +179,11 @@ static void syscall_handler(struct intr_frame* f) {
       validate_buffer_in_user_region(&args[1], sizeof(uint32_t));
       syscall_close((int)args[1]);
       break;
+
+    case SYS_SBRK:
+    validate_buffer_in_user_region(&args[1], sizeof(intptr_t));
+    f->eax = (uint32_t)syscall_sbrk((intptr_t)args[1]);
+    break;
 
     default:
       printf("Unimplemented system call: %d\n", (int)args[0]);

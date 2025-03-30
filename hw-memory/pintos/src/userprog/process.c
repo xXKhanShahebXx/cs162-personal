@@ -203,6 +203,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   off_t file_ofs;
   bool success = false;
   int i;
+  void *max_vaddr = 0;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create();
@@ -269,11 +270,23 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
           }
           if (!load_segment(file, file_page, (void*)mem_page, read_bytes, zero_bytes, writable))
             goto done;
+          {
+            void *seg_end = (void *)(phdr.p_vaddr + phdr.p_memsz);
+            if (seg_end > max_vaddr)
+              max_vaddr = seg_end;
+          }
+
+
         } else
           goto done;
         break;
     }
   }
+
+  if (max_vaddr == 0)
+    max_vaddr = (void *)0x08048000;
+  t->heap_start = pg_round_up(max_vaddr);
+  t->brk = t->heap_start;
 
   /* Set up stack. */
   if (!setup_stack(esp))
