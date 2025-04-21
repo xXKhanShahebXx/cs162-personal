@@ -23,6 +23,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+
+#define TASK_TIMEOUT_SECS 10
+
 typedef struct {
   /* TODO */
   int         next_job_id;   

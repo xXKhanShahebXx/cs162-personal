@@ -11,6 +11,7 @@
 #include "../lib/lib.h"
 #include "../app/app.h"
 #include <glib.h>
+#include <time.h>    
 
 typedef enum {
     JOB_PENDING,                 
@@ -36,8 +37,10 @@ typedef enum {
     char*         output_dir;    
     sized_buffer  args;           
     char*         app_name;
-    task_state*   map_tasks;     
+    task_state*   map_tasks;
+    time_t*       map_start_times;      
     task_state*   reduce_tasks;
+    time_t*       reduce_start_times;
     job_status    status;
   } job;
 #endif

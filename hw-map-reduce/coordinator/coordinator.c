@@ -117,6 +117,9 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   j->map_tasks    = calloc(j->n_map,    sizeof(task_state));
   j->reduce_tasks = calloc(j->n_reduce, sizeof(task_state));
 
+  j->map_start_times    = calloc(j->n_map, sizeof(time_t));   
+  j->reduce_start_times = calloc(j->n_reduce, sizeof(time_t));
+
   j->args.length  = argp->args.args_len;
   if (j->args.length > 0) {
     j->args.buffer = malloc(j->args.length);
@@ -175,10 +178,21 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   result.args.args_len = 0;
   result.args.args_val = NULL;
 
+
+  time_t now = time(NULL);
+
   /* TODO */
   for (GList* it = state->job_queue->head; it; it = it->next) {
     job* j = it->data;
 
+    if (j->status == JOB_FAILED) continue;
+
+
+    for (int i = 0; i < j->n_map; i++) {
+      if (j->map_tasks[i] == TASK_IN_PROGRESS && now - j->map_start_times[i] > TASK_TIMEOUT_SECS) {
+          j->map_tasks[i] = TASK_IDLE;
+      }
+    }
 
     for (int i = 0; i < j->n_map; ++i) {
       if (j->map_tasks[i] == TASK_IDLE) {
@@ -194,6 +208,7 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
         copy_args(&result, &j->args);
 
         j->map_tasks[i] = TASK_IN_PROGRESS;
+        j->map_start_times[i] = now;
         j->status       = JOB_RUNNING;
         return &result;
       }
@@ -201,6 +216,13 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
 
 
     if (!job_maps_done(j)) continue;
+
+    for (int r = 0; r < j->n_reduce; r++) {
+      if (j->reduce_tasks[r] == TASK_IN_PROGRESS && now - j->reduce_start_times[r] > TASK_TIMEOUT_SECS) {
+          j->reduce_tasks[r] = TASK_IDLE;
+      }
+    }
+
     for (int r = 0; r < j->n_reduce; ++r) {
       if (j->reduce_tasks[r] == TASK_IDLE) {
         result.wait        = false;
@@ -215,6 +237,7 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
         copy_args(&result, &j->args);
 
         j->reduce_tasks[r] = TASK_IN_PROGRESS;
+        j->reduce_start_times[r] = now;
         j->status          = JOB_RUNNING;
         return &result;
       }
