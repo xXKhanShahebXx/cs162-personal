@@ -25,6 +25,9 @@
 
 typedef struct {
   /* TODO */
+  int         next_job_id;   
+  GHashTable* jobs;
+  GQueue*     job_queue; 
 } coordinator;
 
 void coordinator_init(coordinator** coord_ptr);
